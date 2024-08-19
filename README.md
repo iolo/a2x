@@ -43,15 +43,18 @@ $ linapple -b --d2 disk2.dsk
 ```console
 ] RUN
 ```
+![](videorom_40x24.png)
 
 9. 80x24 텍스트모드에서 실행
 ```console
 ] PR#3
 ] RUN
 ```
+![](videorom_80x24.png)
 
 9. 80x24 모드 활성화 이후에 40x24 모드로 전환
 ```console
 ] <ESC>4
 ```
+![](videorom_80x24_then_40x24.png)
 
