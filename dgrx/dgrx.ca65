@@ -1,0 +1,563 @@
+; DGRX - Double lo-res graphics library for Apple II
+	.org	$6000
+	.pc02
+
+; zero-page variables
+x1	=	$fa
+y1	=	$fb
+x2	=	$fc
+y2	=	$fd
+color	=	$fe
+ch	=	$ff
+src	=	$ce 	; pointer to source address (2 bytes)
+dst	=	$eb 	; pointer to destination address (2 bytes)
+
+; entry point == jump table
+.proc	dgrx
+	jmp	dgr_init	; $6000(24576)
+	jmp	dgr_exit	; $6003
+	jmp	dgr_cls		; $6006
+	jmp	dgr_plot	; $6009
+	jmp	dgr_hline	; $600C
+	jmp	dgr_vline	; $600F
+	jmp	dgr_rect	; $6012
+	jmp	dgr_fillrect	; $6015
+	jmp	dgr_pixmap	; $6018
+	jmp	dgr_bitmap	; $601B
+	jmp	dgr_putc	; $601E
+	jmp	dgr_puts	; $6021
+.endproc
+
+.word	pixmap			; $6024
+.word	bitmap			; $6026
+.word	fonts			; $6028
+
+; switch to double lo-res page1
+.proc	dgr_init
+	jsr	$C300		; PR#3
+	lda	TEXTOFF
+	sta	COL80ON
+	lda	AN3ON
+	;sta	MIXOFF
+	sta	MIXON
+	sta	ST80OFF
+	lda	PAGE2OFF
+	;lda	PAGE2ON
+
+	; copy MAIN $6000..$7fff to AUX
+	lda	#$00
+	sta	$3c
+	lda	#$60
+	sta	$3d	; src start
+	lda	#$ff
+	sta	$3e
+	lda	#$7f
+	sta	$3f	; src end
+	lda	#$00
+	sta	$42
+	lda	#$60
+	sta	$43	; dest addr
+	sec		; main to aux
+	jsr	$c311	; auxmove
+
+	rts
+.endproc
+
+
+; switch to text(40x24) page1
+.proc	dgr_exit
+	sta	ST80OFF
+	sta	COL80OFF
+	lda	AN3OFF
+	lda	TEXTON
+	;jsr	$C000		; PR#0
+	rts
+.endproc
+
+
+; clear dobule lo-res page1
+; @param color
+.proc	dgr_cls
+	sta	ST80OFF
+	ldx	color
+	ldy	aux_colors,x
+	lda	nibble_double,y
+	sta	WRAUX
+	jsr	text_cls_top
+	lda	#$A0	; space with MSB
+	jsr	text_cls_bottom
+	sta	WRMAIN
+	ldx	color
+	lda	nibble_double,x
+	jsr	text_cls_top
+	lda	#$A0	; space with MSB
+	jsr	text_cls_bottom
+	rts
+.endproc
+
+; clear text page1 top 20 rows(0..19)
+; @param reg.A
+.proc	text_cls_top
+	ldx	#40	; 40 bytes in a row
+@loopx:
+	dex
+	sta	TEXT_ADDR_0,x	; row 0
+	sta	TEXT_ADDR_1,x	; row 1
+	sta	TEXT_ADDR_2,x	; ...
+	sta	TEXT_ADDR_3,x
+	sta	TEXT_ADDR_4,x
+	sta	TEXT_ADDR_5,x
+	sta	TEXT_ADDR_6,x
+	sta	TEXT_ADDR_7,x
+	sta	TEXT_ADDR_8,x
+	sta	TEXT_ADDR_9,x
+	sta	TEXT_ADDR_10,x
+	sta	TEXT_ADDR_11,x
+	sta	TEXT_ADDR_12,x
+	sta	TEXT_ADDR_13,x
+	sta	TEXT_ADDR_14,x
+	sta	TEXT_ADDR_15,x
+	sta	TEXT_ADDR_16,x
+	sta	TEXT_ADDR_17,x
+	sta	TEXT_ADDR_18,x
+	sta	TEXT_ADDR_19,x	; row 19
+	bne	@loopx
+
+	rts
+.endproc
+
+; clear text page1 bottom 4 rows(20..23) for mixed mode
+; @param reg.A
+.proc	text_cls_bottom
+	ldx	#40	; 40 bytes in a row
+@loopx:
+	dex
+	sta	TEXT_ADDR_20,x	; row 20
+	sta	TEXT_ADDR_21,x	; row 20
+	sta	TEXT_ADDR_22,x	; row 20
+	sta	TEXT_ADDR_23,x	; row 20
+	bne	@loopx
+
+	rts
+.endproc
+
+; draw a pixel
+; @param x1
+; @param y1
+; @param color (modified)
+;
+; 4 cases:
+;      even odd
+; even A    C    top-pixel in lo-nibble
+; odd  B    D    bottom-pixel in hi-nibble
+;      AUX  MAIN
+.proc	dgr_plot
+	lda     y1		; reg.X = y1 / 2; 2 pixels in a row
+	lsr
+	tax
+	lda 	text_lo,x
+	sta 	dst
+	lda 	text_hi,x
+	sta 	dst+1
+
+	lda     x1
+	lsr
+	tay			; reg.Y = x1 / 2; byte offset in a row
+
+	lda     x1
+	and	#1
+	bne	@main
+
+; even column -> AUX
+	ldx	color
+	lda	aux_colors,x	; reg.A = aux color
+	sta	color
+
+	lda	y1
+	and	#1
+	beq	@aux_top
+
+; even column & even row
+@aux_bottom:
+	asl	color
+	asl	color
+	asl	color
+	asl	color		; color <<= 4
+
+	sta	ST80OFF
+	sta	RDAUX
+	lda	(dst),y
+	sta	RDMAIN
+	and	#$0F		; keep hi-nibble on screen
+	ora	color		; set color to lo-nibble
+	sta	WRAUX
+	sta	(dst),y
+	sta	WRMAIN
+	rts
+
+; even column & odd row
+@aux_top:
+	sta	ST80OFF
+	sta	RDAUX
+	lda 	(dst),y
+	sta	RDMAIN
+	and	#$F0		; keep lo-nibble on screen
+	ora	color		; set color to hi-nibble
+	sta	WRAUX
+	sta	(dst),y
+	sta	WRMAIN
+	rts
+
+; odd column -> MAIN
+@main:
+	lda	y1
+	and	#1
+	beq	@main_top
+
+; odd column & even row
+@main_bottom:
+	asl	color
+	asl	color
+	asl	color
+	asl	color		; color <<= 4
+
+	lda	(dst),y
+	and	#$0F		; keep lo-nibble on screen
+	ora	color		; set color to hi-nibble
+	sta	(dst),y
+	rts
+
+; odd column & odd row
+@main_top:
+	lda	(dst),y
+	and	#$F0		; keep hi-nibble on screen
+	ora	color		; set color to lo-nibble
+	sta	(dst),y
+	rts
+.endproc
+
+
+; draw horizontal line
+; @param x1 (modified)
+; @param x2
+; @param y1
+; @param color
+.proc	dgr_hline
+	lda	x2
+	sec
+	sbc	x1		; reg.A = length
+@loopx:
+	pha
+	lda	color
+	pha
+	jsr 	dgr_plot
+	pla
+	sta	color
+	pla
+	inc	x1
+	dec
+	bpl 	@loopx
+	rts
+.endproc
+
+
+; draw vertical line
+; @param y1 (modfied)
+; @param y2
+; @param x1
+; @param color
+.proc	dgr_vline
+	lda	y2
+	sec
+	sbc	y1		; reg.A = length
+@loopy:
+	pha
+	lda	color
+	pha
+	jsr 	dgr_plot
+	pla
+	sta	color
+	pla
+	inc	y1
+	dec
+	bpl 	@loopy
+	rts
+.endproc
+
+
+; draw rectangle
+; @param x1
+; @param x2
+; @param y1
+; @param y2
+; @param color
+.proc	dgr_rect
+
+	lda	x1
+	pha
+	jsr 	dgr_hline	; hlin x1,x2,y1
+	pla
+	sta	x1
+
+	lda	x1
+	pha
+	lda	y1
+	pha
+	lda 	y2
+	sta 	y1
+	jsr 	dgr_hline	; hlin x1,x2,y2
+	pla
+	sta	y1
+	pla
+	sta	x1
+
+	inc 	y1
+	dec 	y2
+
+	lda	y1
+	pha
+	jsr 	dgr_vline	; vlin y1+1,y2-1,x1
+	pla
+	sta	y1
+
+	lda 	x2
+	sta 	x1
+	jsr 	dgr_vline	; vlin y1+1,y2-1,x2
+
+	rts
+.endproc
+
+
+; draw filled rectangle
+; @param x1
+; @param x2
+; @param y1(modified)
+; @param y2
+; @param color
+.proc	dgr_fillrect
+	lda	y2
+	sec
+	sbc	y1		; reg.A = height
+@loopy:
+	pha
+	lda	x1
+	pha
+	jsr 	dgr_hline
+	pla
+	sta	x1
+	pla
+	inc	y1
+	dec
+	bpl 	@loopy
+
+	rts
+.endproc
+
+
+; draw pixmap
+; @param x1
+; @param y1
+; @param width
+; @param height
+; @param color - transparent color
+; @param src(modified) - pointer to pixel data; 1 byte per pixel; (x2-x1+1)*(y2-y1+1) bytes
+.proc	dgr_pixmap
+	lda	x1
+	sta	@_x1
+	lda	color
+	sta	@_color
+
+@loop:
+	ldy	#0
+	lda	(src),y
+	cmp	@_color
+	beq	@skip	; skip transparent
+	sta	color
+	jsr 	dgr_plot
+@skip:
+	inc	x1	; next column
+	ldy	x2
+	cpy	x1
+	bpl	@continue; while ++x1 <= x2
+
+	ldy	@_x1
+	sty	x1	; carriage return
+	inc	y1	; line feed
+	ldy	y2
+	cpy	y1
+	bpl	@continue; while ++y1 <= y2
+
+	rts
+
+@continue:
+	inc	src	; next byte
+	bne	@loop
+	inc	src+1	; next page
+	bne	@loop	; jmp always
+	rts		; safe guard
+
+@_x1:	.byte	0
+@_color:.byte	0
+.endproc
+
+
+; draw bitmap
+; @param x1
+; @param y1
+; @param x2
+; @param y2
+; @param color
+; @param src(modified) - pointer to pixel data; 1 bit per pixel; (x2-x1+1)*(y2-y1+1) bytes
+.proc	dgr_bitmap
+	lda	x1
+	sta	@_x1
+	lda	color
+	sta	@_color
+
+@loop:
+	ldy	#0
+	lda	(src),y
+	ldx	#8	; 8 bits in a byte
+@loop_bit:
+	asl
+	bcc	@skip	; skip skip transparent
+	ldy	@_color
+	sty	color
+	pha
+	phx
+	jsr 	dgr_plot
+	plx
+	pla
+@skip:
+	inc	x1	; next column
+	ldy	x2
+	cpy	x1
+	bpl	@continue; while x1 <= x2
+
+	ldy	@_x1
+	sty	x1	; carriage return
+	inc	y1	; line feed
+	ldy	y2
+	cpy	y1
+	bpl	@continue; while ++y1 <= y2
+
+	rts
+
+@continue:
+	dex		; next bit
+	bne	@loop_bit
+	inc	src	; next byte
+	bne	@loop
+	inc	src+1	; next page
+	bne	@loop	; jmp always
+	rts		; safe guard
+
+@_x1:	.byte	0
+@_color:.byte	0
+.endproc
+
+
+; draw char
+; @param x1
+; @param y1
+; @param color
+; @param ch
+.proc	dgr_putc
+	lda	#<fonts
+	sta	src
+	lda	#>fonts
+	sta	src+1
+
+	lda	ch
+	sec
+	sbc	#$20	; reg.A = ch - $20
+	sta	ch
+
+	lda	src
+	clc
+	adc	ch
+	bcc	@no_carry1
+	inc	src+1
+@no_carry1:
+	clc
+	adc	ch
+	bcc	@no_carry2
+	inc	src+1
+@no_carry2:
+	clc
+	adc	ch
+	bcc	@no_carry3
+	inc	src+1
+@no_carry3:
+	sta	src
+	; src = fonts + (ch - 0x20)*3
+
+	lda	x1
+	clc
+	adc	#3	; width-1
+	sta	x2
+
+	lda	y1
+	clc
+	adc	#5	; height-1
+	sta	y2
+
+	jsr	dgr_bitmap
+	rts
+.endproc
+
+
+; draw text string
+; @param x1(modified)
+; @param y1(modified)
+; @param color
+; @param src - pointer to string ends with zero
+.proc	dgr_puts
+	ldy	#0
+	lda	(src),y
+@loop:
+	sta	ch
+	jsr	dgr_putc
+	inc	x1
+	cmp	#80
+	bne	@continue
+	lda	#0
+	sta	x1
+	inc	y1
+@continue:
+	iny
+	lda	(src),y
+	bne	@loop
+
+	rts
+.endproc
+
+
+; color 0..15 to both top and bottom nibbles
+; (color << 4) | (color & 0x0F)
+nibble_double:
+	.byte	$00,$11,$22,$33,$44,$55,$66,$77
+	.byte	$88,$99,$AA,$BB,$CC,$DD,$EE,$FF
+
+; color 0..15 to high nibble(bottom pixel)
+; color << 4
+nibble_flip:
+	.byte	$00,$10,$20,$30,$40,$50,$60,$70
+	.byte	$80,$90,$A0,$B0,$C0,$D0,$E0,$F0
+
+; even column -> top pixel; keep hi-nibble
+; odd row -> bottom pixel; keep lo-nibble
+nibble_mask:
+	.byte $F0,$0F
+
+; MAIN color to AUX color
+aux_colors:	;0, 1, 2, 3, 4, 5, 6, 7, 8, 9, A, B, C, D, E, F
+	.byte 	$0,$8,$1,$9,$2,$A,$3,$B,$4,$C,$5,$D,$6,$E,$7,$F
+
+.include	"softswitch.ca65"
+.include	"textaddr.ca65"
+.include	"pixmap.ca65"
+.include	"bitmap.ca65"
+.include	"font.ca65"
+
+

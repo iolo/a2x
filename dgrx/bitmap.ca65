@@ -1,0 +1,10 @@
+bitmap:
+	; sample 8x8 bitmap
+	.byte %00111000
+	.byte %01000100
+	.byte %10101010
+	.byte %10000010
+	.byte %10111010
+	.byte %01000100
+	.byte %00111000
+	.byte %00000000

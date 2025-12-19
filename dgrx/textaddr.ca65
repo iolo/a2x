@@ -1,0 +1,47 @@
+; text page 1 base address
+; lda row
+; asl
+; tax
+; lda text_addr,x
+; lda text_addr+1,x
+text_addr:
+	.word	$0400,$0480,$0500,$0580,$0600,$0680,$0700,$0780
+	.word	$0428,$04A8,$0528,$05A8,$0628,$06A8,$0728,$07A8
+	.word	$0450,$04D0,$0550,$05D0,$0650,$06D0,$0750,$07D0
+text_hi:
+	.byte	$04,$04,$05,$05,$06,$06,$07,$07
+	.byte	$04,$04,$05,$05,$06,$06,$07,$07
+	.byte	$04,$04,$05,$05,$06,$06,$07,$07
+text_lo:
+	.byte	$00,$80,$00,$80,$00,$80,$00,$80
+	.byte	$28,$A8,$28,$A8,$28,$A8,$28,$A8
+	.byte	$50,$D0,$50,$D0,$50,$D0,$50,$D0
+
+;.define	TEXT_ADDR_(y)	$400 + (128 * (y .mod 8)) + (40 * (y / 8))
+
+TEXT_ADDR_0	=	$0400
+TEXT_ADDR_1	=	$0480
+TEXT_ADDR_2	=	$0500
+TEXT_ADDR_3	=	$0580
+TEXT_ADDR_4	=	$0600
+TEXT_ADDR_5	=	$0680
+TEXT_ADDR_6	=	$0700
+TEXT_ADDR_7	=	$0780
+TEXT_ADDR_8	=	$0428
+TEXT_ADDR_9	=	$04A8
+TEXT_ADDR_10	=	$0528
+TEXT_ADDR_11	=	$05A8
+TEXT_ADDR_12	=	$0628
+TEXT_ADDR_13	=	$06A8
+TEXT_ADDR_14	=	$0728
+TEXT_ADDR_15	=	$07A8
+TEXT_ADDR_16	=	$0450
+TEXT_ADDR_17	=	$04D0
+TEXT_ADDR_18	=	$0550
+TEXT_ADDR_19	=	$05D0
+TEXT_ADDR_20	=	$0650
+TEXT_ADDR_21	=	$06D0
+TEXT_ADDR_22	=	$0750
+TEXT_ADDR_23	=	$07D0
+
+
